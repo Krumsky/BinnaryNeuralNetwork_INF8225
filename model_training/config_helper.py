@@ -7,8 +7,6 @@ def parameter_to_plot_label(param_name: str, param_value) -> str:
     """
     if param_name == 'model':
         return param_value # Assuming param_value is a string like 'MLP', 'VGG', etc.
-    if param_name == 'freeze_agent':
-        return param_value # Assuming param_value is a string like 'NullFreezer', 'GradientFreezer', etc.
     return f"{param_name}={param_value}" # For other parameters, just return the name and value
 
 def get_multi_params(config: dict) -> tuple:
@@ -23,14 +21,6 @@ def get_multi_params(config: dict) -> tuple:
             multi_params.append(list(zip(config['model']['model'], config['model']['model_args']))) # [(model1, args1), (model2, args2)]
         else:
             multi_params.append(list(product([config['model']['model']], config['model']['model_args']))) # [(model, args1), (model, args2)]
-    if isinstance(config['train']['freeze_args'], list):
-        multi_params_names.append('freeze_agent')
-        if isinstance(config['train']['freeze_agent'], list):
-            if len(config['train']['freeze_agent']) != len(config['train']['freeze_args']):
-                raise ValueError("The number of freeze agents and freeze arguments dictionaries must match.")
-            multi_params.append(list(zip(config['train']['freeze_agent'], config['train']['freeze_args']))) # [(freeze1, args1), (freeze2, args2)]
-        else:
-            multi_params.append(list(product([config['train']['freeze_agent']], config['train']['freeze_args']))) # [(freeze, args1), (freeze, args2)]
     if isinstance(config['dataset']['dataset'], list):
         multi_params_names.append('dataset')
         multi_params.append(config['dataset']['dataset'])
@@ -72,9 +62,6 @@ def config_splitter(config: dict) -> list:
             if param_name == 'model':
                 subconfig['model']['model'] = param[0]
                 subconfig['model']['model_args'] = deepcopy(param[1]) # Deepcopy because this is a dictionary
-            elif param_name == 'freeze_agent':
-                subconfig['train']['freeze_agent'] = param[0]
-                subconfig['train']['freeze_args'] = deepcopy(param[1]) # Deepcopy because this is a dictionary
             elif param_name == 'dataset':
                 subconfig['dataset']['dataset'] = param
             elif param_name == 'batch_size':

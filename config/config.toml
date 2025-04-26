@@ -10,9 +10,6 @@ loss_fn = "cross_entropy_binreg" # Select among cross_entropy, mse
 optim_args = {lr=0.1, momentum=0.9, weight_decay=0.0001}
 scheduler_args = {milestones = [250,400], gamma = 0.1}
 device = "cuda"
-freeze_agent = "NullFreezer"
-freeze_args = {name='my null freezer'} #{name='my simple freezer', lt=0.05, ht=10.0, p=1.0, activation_time=100}
-manual_freeze = false
 
 [dataset]
 dataset = "mnist" # Select among c10, c100, mnist
