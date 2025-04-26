@@ -1,0 +1,35 @@
+[model]
+model = "MobileNetV2"
+seed = 42
+device = "cuda:2" # Assurez-vous que c'est le bon GPU pour vous
+
+[model.model_args]
+name = "MobileNetV2_CIFAR10_Adam_500Epochs" # Nom mis à jour
+num_classes = 10      # Pour CIFAR-10
+input_channels = 3    # Pour CIFAR-10
+width_mult = 1.0
+dbits = 1             # Pour la binarisation QAT
+
+[dataset]
+dataset = "c10"       # Utiliser CIFAR-10
+batch_size = 64       # Taille de lot initiale
+
+[train]
+epochs = 500           # Mis à jour à 50 époques
+optimizer = "adam"    # Optimiseur Adam
+loss_fn = "cross_entropy"
+freeze_agent = "NullFreezer" # Pas de gel
+
+[train.optim_args]
+lr = 0.001            # Taux d'apprentissage standard pour Adam
+
+[train.scheduler_args]
+milestones = [250,400] # Ajusté pour 50 époques (réduction à 60% et 80%)
+gamma = 0.1           # Division par 10 du LR
+
+[train.freeze_args]
+# Aucun argument nécessaire pour NullFreezer
+
+[results]
+explore = []
+plots = ["loss", "accuracy"] # Générer les graphiques

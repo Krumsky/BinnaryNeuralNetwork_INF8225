@@ -1,0 +1,15 @@
+[measures]
+losses = false
+accuracy = true
+frozen = false
+
+[files]
+rfile_lists = [
+    ['runs/results_WeightFreeze/bMLP_0000.csv', 'runs/results_WeightFreeze/bMLP_0001.csv', 'runs/results_WeightFreeze/bMLP_0002.csv', 'runs/results_WeightFreeze/bMLP_0006.csv']
+]
+name_lists = [
+    ['Baseline', 'Gradient only', 'Gradient and Sign', 'Freeze Oscillators']
+]
+pfile_list = [
+    'runs/results_WeightFreeze/plots/acc_over_agents'
+]

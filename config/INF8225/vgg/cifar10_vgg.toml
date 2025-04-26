@@ -1,0 +1,28 @@
+# Example configuration file for training a model
+[model]
+model = "VGG" # Select among any model available in the qnn/models directory
+model_args = [
+    {name="VGG fp32", in_channels=3, out_features=10, binary_weights=false, binary_activations=false},
+    {name="VGG binary weights", in_channels=3, out_features=10, binary_weights=true, binary_activations=false},
+    {name="VGG full binary", in_channels=3, out_features=10, binary_weights=true, binary_activations=true}
+]
+seed = 1408
+
+[train]
+epochs = 500
+optimizer = "sgd" # Select among sgd, adam
+loss_fn = "cross_entropy" # Select among cross_entropy, mse
+optim_args = {lr=0.1, momentum=0.9, weight_decay=0.0001}
+scheduler_args = {milestones = [250,400], gamma = 0.1}
+device = "cuda"
+freeze_agent = "NullFreezer"
+freeze_args = {name='no freeze'}
+manual_freeze = false
+
+[dataset]
+dataset = "c10" # Select among c10, c100, mnist
+batch_size = 256
+
+[results]
+explore = ["model"]
+plots = ["accuracy", "loss", "weight_histogram"]
