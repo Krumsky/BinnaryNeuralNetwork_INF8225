@@ -1,20 +1,22 @@
 [model]
-model = "MLP" # Select among any model available in the qnn/models directory
+model = "MLP" # Select among AlexNet, mbv2, resnet18, resnet50, mcunet
 model_args = {name="MLP_full_binary", in_features=784, out_features=10, hidden_dim=1024, binary_weight=true, binary_activation=true} # Arguments passed to the model
 seed = 1408
 
 [train]
-epochs = 500
+epochs = 1000
 optimizer = "sgd" # Select among sgd, adam
-loss_fn = "cross_entropy_binreg" # Select among cross_entropy, mse
+loss_fn = "cross_entropy" # Select among cross_entropy, mse
 optim_args = {lr=0.1, momentum=0.9, weight_decay=0.0001}
-scheduler_args = {milestones = [250,400], gamma = 0.1}
+scheduler_args = {milestones = [500,850], gamma = 0.1}
 device = "cuda"
+freeze_agent = "none"
+freeze_args = {}
+manual_freeze = false
 
 [dataset]
 dataset = "mnist" # Select among c10, c100, mnist
 batch_size = 256
 
-[results]
-explore = ["none"]
-plots = ["weight_histogram"]
+[measure]
+measures = ["None"]

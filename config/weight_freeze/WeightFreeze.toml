@@ -1,0 +1,44 @@
+# Example configuration file for training a model
+[model]
+model = "MLP" # Select among any model available in the qnn/models directory
+model_args = {name="bMLP", in_features=784, out_features=10, hidden_dim=1024, binary_weight=true, binary_activation=true} # Arguments passed to the model
+seed = 1408
+
+[train]
+epochs = 1000
+optimizer = "sgd" # Select among sgd, adam
+loss_fn = "cross_entropy" # Select among cross_entropy, mse
+optim_args = {lr=0.1, momentum=0.9, weight_decay=0.0001}
+scheduler_args = {milestones = [500,850], gamma = 0.1}
+device = "cuda"
+freeze_agent = [
+    "NullFreezer",
+    "GradientFreezer",
+    "GradientAndSignFreezer",
+    "OscillatorFreezer",
+    "OscillatorFreezer",
+    "OscillatorFreezer",
+    "OscillatorFreezer",
+    "OscillatorFreezer",
+    "OscillatorFreezer",
+]
+freeze_args = [
+    {name='null freezer'},
+    {name='gradient freezer', threshold=50, activation_time=100},
+    {name='gradient and sign freezer', threshold=50, activation_time=100},
+    {name='oscillator freezer t=0.1 p=0.1', threshold=50, activation_time=100, osc_threshold=0.1, probability=0.1},
+    {name='oscillator freezer t=0.1 p=0.25', threshold=50, activation_time=100, osc_threshold=0.1, probability=0.25},
+    {name='oscillator freezer t=0.1 p=0.5', threshold=50, activation_time=100, osc_threshold=0.1, probability=0.5},
+    {name='oscillator freezer t=0.01 p=0.1', threshold=50, activation_time=100, osc_threshold=0.01, probability=0.1},
+    {name='oscillator freezer t=0.01 p=0.25', threshold=50, activation_time=100, osc_threshold=0.01, probability=0.25},
+    {name='oscillator freezer t=0.01 p=0.5', threshold=50, activation_time=100, osc_threshold=0.01, probability=0.5},
+]
+manual_freeze = false
+
+[dataset]
+dataset = "mnist" # Select among c10, c100, mnist
+batch_size = 256
+
+[results]
+explore = ["none"]
+plots = ["accuracy", "loss"]

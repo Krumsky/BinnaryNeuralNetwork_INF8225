@@ -1,0 +1,20 @@
+[model]
+model = "bnVGG" # Select among AlexNet, mbv2, resnet18, resnet50, mcunet
+dbits = 1 # Select the bit size of hidden layers data
+weights = "scratch" # Select among pretrained, scratch
+seed = 1408
+
+[train]
+epochs = 1000
+optimizer = "adam" # Select among sgd, adam
+loss_fn = "cross_entropy" # Select among cross_entropy, mse
+optim_args = {lr=0.1}
+scheduler_args = {milestones = [500,850], gamma = 0.1}
+device = "cuda"
+
+[dataset]
+dataset = "c10" # Select among c10, c100, mnist
+batch_size = 256
+
+[measures]
+measures = ["None"]

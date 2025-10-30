@@ -23,6 +23,9 @@ class Builder():
         for attr_name in dataset_config:
             # set dataset attributes
             self.__setattr__(attr_name, dataset_config[attr_name])
+        
+        if "thermometer" not in self.model_args:
+            self.model_args["thermometer"] = False
 
         # Set the RNG seed
         torch.manual_seed(self.seed)
@@ -33,10 +36,16 @@ class Builder():
         self.input_size = None
         if self.dataset == 'mnist':
             self.input_size = 28
-            train_transform = T.Compose([
-                T.ToTensor(),
-                T.Normalize(0, 1)
-            ])
+            # Transform
+            if self.model_args["thermometer"]:
+                train_transform = T.Compose([
+                T.ToTensor()
+                ])
+            else:
+                train_transform = T.Compose([
+                    T.ToTensor(),
+                    T.Normalize(0, 1)
+                ])
             test_transform = train_transform
             self.dataset = {
                 'train': datasets.MNIST("./datasets/MNIST", train=True, transform=train_transform, download=True),
@@ -50,9 +59,16 @@ class Builder():
         # MNIST Fashion
         elif self.dataset == 'mnist_fashion':
             self.input_size = 28
-            train_transform = T.Compose([
-                T.ToTensor()
-            ])
+            # Transform
+            if self.model_args["thermometer"]:
+                train_transform = T.Compose([
+                    T.ToTensor()
+                ])
+            else:
+                train_transform = T.Compose([
+                    T.ToTensor(),
+                    T.Normalize(0.5, 0.5)
+                ])
             test_transform = train_transform
             self.dataset = {
                 'train': datasets.FashionMNIST("./datasets/MNISTF", train=True, transform=train_transform, download=True),
@@ -66,16 +82,27 @@ class Builder():
         # CIFAR10
         elif self.dataset == 'c10':
             self.input_size = 32
-            train_transform = T.Compose([
-                T.RandomHorizontalFlip(),
-                T.RandomCrop(32, 4), 
-                T.ToTensor(),
-                T.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))
-            ])
-            test_transform = T.Compose([
-                T.ToTensor(),
-                T.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))
-            ])
+            # Transform
+            if self.model_args["thermometer"]:
+                train_transform = T.Compose([
+                    T.RandomHorizontalFlip(),
+                    T.RandomCrop(32, 4), 
+                    T.ToTensor()
+                ])
+                test_transform = T.Compose([
+                    T.ToTensor()
+                ])
+            else:
+                train_transform = T.Compose([
+                    T.RandomHorizontalFlip(),
+                    T.RandomCrop(32, 4), 
+                    T.ToTensor(),
+                    T.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))
+                ])
+                test_transform = T.Compose([
+                    T.ToTensor(),
+                    T.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))
+                ])
             self.dataset = {
                 'train': datasets.CIFAR10("./datasets/CIFAR10", train=True, transform=train_transform, download=True),
                 'test': datasets.CIFAR10("./datasets/CIFAR10", train=False, transform=test_transform, download=True)
@@ -87,16 +114,27 @@ class Builder():
         # CIFAR100
         elif self.dataset == 'c100':
             self.input_size = 32
-            train_transform = T.Compose([
-                T.RandomHorizontalFlip(),
-                T.RandomCrop(32, 4),
-                T.ToTensor(),
-                T.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
-            ])
-            test_transform = T.Compose([
-                T.ToTensor(),
-                T.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
-            ])
+            # Transform
+            if self.model_args["thermometer"]:
+                train_transform = T.Compose([
+                    T.RandomHorizontalFlip(),
+                    T.RandomCrop(32, 4),
+                    T.ToTensor()
+                ])
+                test_transform = T.Compose([
+                    T.ToTensor()
+                ])
+            else:
+                train_transform = T.Compose([
+                    T.RandomHorizontalFlip(),
+                    T.RandomCrop(32, 4),
+                    T.ToTensor(),
+                    T.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+                ])
+                test_transform = T.Compose([
+                    T.ToTensor(),
+                    T.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+                ])
             self.dataset = {
                 'train': datasets.CIFAR100("./datasets/CIFAR100", train=True, transform=train_transform, download=True),
                 'test': datasets.CIFAR100("./datasets/CIFAR100", train=False, transform=test_transform, download=True)
@@ -117,6 +155,10 @@ class Builder():
         # Initialize the model
         self.model_name = self.model
         self.model = model_factory(self.model_name, self.model_args)
+        if self.weights and self.weights != "None":
+            # Load the model weights if specified
+            print("Weights found")
+            self.load_model(self.weights)
         
 
     def load_model(self, weights_path):

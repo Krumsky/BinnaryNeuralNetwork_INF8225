@@ -109,6 +109,8 @@ class Plotter():
                         plot_loss_results(result_file_list, result_label_list, filepath, show_plot=False)
                     elif plot_type == 'accuracy':
                         plot_accuracy_results(result_file_list, result_label_list, filepath, show_plot=False)
+                    elif plot_type == 'error_rate':
+                        plot_error_rate_results(result_file_list, result_label_list, filepath, show_plot=False)
                     elif plot_type == 'frozen':
                         plot_frozen_evolution(result_file_list, result_label_list, filepath, show_plot=False)
                     
@@ -159,10 +161,12 @@ class Plotter():
                     # Plot the weight histogram
                     plot_weight_histogram(model, filepath, show_plot=False)
                 elif plot_type == 'loss': ### LOSS ###
-                    plot_loss_results([result_filepath + 'raw_csv/' + subconfig['model']['model_args']['name'] + '.csv'], ['main'], filepath, show_plot=False)
+                    plot_loss_results([result_filepath + 'raw_csv/' + subconfig['model']['model_args']['name'] + '.csv'], [subconfig['model']['model_args']['name']], filepath, show_plot=False)
                 elif plot_type == 'accuracy': ### ACCURACY ###
-                    plot_accuracy_results([result_filepath + 'raw_csv/' + subconfig['model']['model_args']['name'] + '.csv'], ['main'], filepath, show_plot=False)
+                    plot_accuracy_results([result_filepath + 'raw_csv/' + subconfig['model']['model_args']['name'] + '.csv'], [subconfig['model']['model_args']['name']], filepath, show_plot=False)
+                elif plot_type == 'error_rate': ### ERROR RATE ###
+                    plot_error_rate_results([result_filepath + 'raw_csv/' + subconfig['model']['model_args']['name'] + '.csv'], [subconfig['model']['model_args']['name']], filepath, show_plot=False)
                 elif plot_type == 'frozen': ### FROZEN ###
-                    plot_frozen_evolution([result_filepath + 'raw_csv/' + subconfig['model']['model_args']['name'] + '.csv'], ['main'], filepath, show_plot=False)
+                    plot_frozen_evolution([result_filepath + 'raw_csv/' + subconfig['model']['model_args']['name'] + '.csv'], [subconfig['model']['model_args']['name']], filepath, show_plot=False)
 
                 

@@ -1,9 +1,11 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
+import torchvision.transforms as T
 
 from qnn.modules import QATLinear, QATConv2d, Binarize, clip  
 from qnn.models.basic_models import ModelBase 
+from qnn.thermometer import ThermometerLayer
 
 
 class BPReLU(nn.Module):
@@ -15,18 +17,24 @@ class BPReLU(nn.Module):
     
     def __init__(self, in_channels):
         super(BPReLU, self).__init__()
-        self.alpha = nn.Parameter(torch.Tensor(in_channels))
-        self.gamma = nn.Parameter(torch.Tensor(in_channels))
-        self.prelu = nn.PReLU()
-        self.reset_parameters()
-        
-    def reset_parameters(self):
-        nn.init.uniform_(self.alpha, 0.0, 1.0)
-        nn.init.uniform_(self.gamma, 0.0, 1.0)
+        self.alpha = nn.Parameter(torch.zeros((1, in_channels, 1, 1)), requires_grad=True)  # Horizontal bias
+        self.gamma = nn.Parameter(torch.zeros((1, in_channels, 1, 1)), requires_grad=True)  # Vertical bias
+        self.prelu = nn.PReLU(in_channels)
         
     def forward(self, x):
-        return (self.prelu(x.transpose(1,-1) + self.alpha) - self.gamma).transpose(1,-1)
+        return self.prelu(x + self.alpha.expand_as(x)) - self.gamma.expand_as(x)
     
+class SelfCatLayer(nn.Module):
+    """
+    Concatenation layer that concatenates the input with itself along the channel dimension.
+    """
+    
+    def __init__(self, dim=1):
+        super(SelfCatLayer, self).__init__()
+        self.dim = dim
+        
+    def forward(self, x):
+        return torch.cat((x, x), dim=self.dim)
 
 class FracBNNResidualBlock(nn.Module):
     
@@ -35,43 +43,53 @@ class FracBNNResidualBlock(nn.Module):
         
         # Parameter initialization
         self.in_channels = inp
-        self.out_channels = inp * 2 if downsample else inp
+        self.out_channels = inp * 2 if downsample else inp # Double the number of channels if downsampling
         self.downsample = downsample
         self.stride = 2 if downsample else 1
         
-        # 3x3 Convolution block
+        # Sign activation function
         self.sign = Binarize()
-        self.conv1 = QATConv2d(inp, inp, kernel_size=3, stride=self.stride, padding=1) # Downsampling layer (if downsample there is)
-        self.bn1 = nn.BatchNorm2d(inp)
-        self.bprelu1 = BPReLU(inp)
-        self.bn_out1 = nn.BatchNorm2d(inp) # Supplementary BN layer used after the residual connection
-        self.downsample_avg_pool = nn.AvgPool2d(kernel_size=2, stride=2) if downsample else None # Avg pool to downsample the input for residual connection
         
-        # 1x1 Expansion convolution block
-        self.conv2 = QATConv2d(inp, self.out_channels, kernel_size=1, stride=1, padding=0)
+        # 3x3 Convolution block
+        self.conv1 = QATConv2d(self.in_channels, self.out_channels, kernel_size=3, stride=self.stride, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(self.out_channels)
+        self.bprelu1 = BPReLU(self.out_channels)
+        self.bn_out1 = nn.BatchNorm2d(self.out_channels) # Supplementary BN layer used after the residual connection
+        
+        # Shortcut connection for downsampling (avgpool and concatenate if downsampling, otherwise identity)
+        self.shortcut1 = nn.Sequential()
+        if self.downsample:
+            self.shortcut1 = nn.Sequential(
+                nn.AvgPool2d(kernel_size=2, stride=2), # Avg pool to downsample the input for residual connection
+                SelfCatLayer(dim=1), # Concatenate the input with itself along the channel dimension
+            )
+        
+        # Second 3x3 Expansion convolution block
+        self.conv2 = QATConv2d(self.out_channels, self.out_channels, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(self.out_channels)
         self.bprelu2 = BPReLU(self.out_channels)
         self.bn_out2 = nn.BatchNorm2d(self.out_channels) # Supplementary BN layer used after the residual connection
 
     def forward(self, x):
-        identity = x
         
+        # Keep the input
+        identity = x
         # 3x3 Convolution block
         out = self.sign(x)
         out = self.conv1(out) # Downsample if needed
         out = self.bn1(out)
         out = self.bprelu1(out)
-        out = out + (self.downsample_avg_pool(identity) if self.downsample else identity) # Residual connection 1
+        out = out + self.shortcut1(identity) # Residual connection 1
         out = self.bn_out1(out)
         
+        # Keep the activation
         identity = out
-        
-        # 1x1 Expansion convolution block
+        # 3x3 Expansion convolution block
         out = self.sign(out)
-        out = self.conv2(out) # If there is downsampling, double the number of channels
+        out = self.conv2(out)
         out = self.bn2(out)
         out = self.bprelu2(out)
-        out = out + (torch.cat([identity, identity], dim=1) if self.downsample else identity) # Residual connection 2
+        out = out + identity # Residual connection 2
         out = self.bn_out2(out)
         
         return out
@@ -85,7 +103,7 @@ class FracBNNModel(ModelBase):
     """
     Resnet-18 architecture with FracBNN blocks.
     """
-    def __init__(self, in_channels, out_features, input_size=32, thermometer_embedding=True, *args, **kwargs):
+    def __init__(self, in_channels, out_features, input_size=32, thermometer=True, *args, **kwargs):
         super(FracBNNModel, self).__init__()
         
         # Assert input size is divisible by 32, as the model is designed for Imagenet (works with CIFAR-10 and CIFAR-100 too)
@@ -93,26 +111,28 @@ class FracBNNModel(ModelBase):
         
         # Resnet-18 architecture (inp, oup, downsample)
         arch = [
-            [64, 64, False], # Conv2_1
-            [64, 64, False], # Conv2_2
-            [64, 128, True], # Conv3_1, downsample
-            [128, 128, False], # Conv3_2
-            [128, 256, True], # Conv4_1, downsample
-            [256, 256, False], # Conv4_2
-            [256, 512, True], # Conv5_1, downsample
-            [512, 512, False] # Conv5_2
+            [16, 16, False], # Conv2_1
+            [16, 16, False], # Conv2_2
+            [16, 16, False], # Conv2_3
+            [16, 32, True], # Conv3_1, downsample
+            [32, 32, False], # Conv3_2
+            [32, 32, False], # Conv3_3
+            [32, 64, True], # Conv4_1, downsample
+            [64, 64, False], # Conv4_2
+            [64, 64, False], # Conv4_3
         ]
-        self.classifier_in_features = arch[-1][1] * ((input_size // 32) ** 2) # Number of features after the last conv block
+        self.classifier_in_features = arch[-1][1] # Number of features after the last conv block
         
         # Entry layer (non binarized)
-        self.thermometer_embedding = thermometer_embedding
-        if thermometer_embedding:
-            self.entry = QATConv2d(in_channels*8, 64, kernel_size=7, stride=2, padding=3, bias=True)
+        self.thermometer = thermometer
+        if thermometer:
+            # Thermometer encoding layer
+            self.thermometer_layer = ThermometerLayer(in_channels=in_channels)
+            # Binary entry layer with 8 times more channels
+            self.entry = QATConv2d(in_channels*32, 16, kernel_size=3, stride=1, padding=1, bias=False)
         else:
-            self.entry = nn.Conv2d(in_channels, 64, kernel_size=7, stride=2, padding=3, bias=True)
-        self.entry_BN = nn.BatchNorm2d(64)
-        self.entry_act = nn.ReLU()
-        self.max_pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+            self.entry = nn.Conv2d(in_channels, 16, kernel_size=3, stride=1, padding=1, bias=False)
+        self.entry_BN = nn.BatchNorm2d(16)
         
         # Residual blocks
         self.residual_blocks = nn.ModuleList()
@@ -120,24 +140,26 @@ class FracBNNModel(ModelBase):
             self.residual_blocks.append(FracBNNResidualBlock(inp, downsample))
         
         # Classifier
-        self.final_pool = nn.AvgPool2d(kernel_size=3, stride=1, padding=1)
         self.flatten = nn.Flatten()
         self.classifier = nn.Linear(self.classifier_in_features, out_features, bias=True)
         
     def forward(self, x):
+        if self.thermometer:
+            # Apply thermometer encoding if enabled
+            x = self.thermometer_layer(x)
         # Entry layer
         x = self.entry(x)
         x = self.entry_BN(x)
-        x = self.entry_act(x)
-        x = self.max_pool(x)
         
         # Residual blocks
         for block in self.residual_blocks:
             x = block(x)
         
-        # Classifier
-        x = self.final_pool(x)
+        # Final pooling (if needed) and flattening
+        x = F.adaptive_avg_pool2d(x, (1, 1))
         x = self.flatten(x)
+        
+        # Classifier
         x = self.classifier(x)
         
         return x

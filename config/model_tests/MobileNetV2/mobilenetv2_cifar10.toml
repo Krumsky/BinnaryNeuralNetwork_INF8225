@@ -18,6 +18,7 @@ batch_size = 64       # Taille de lot initiale
 epochs = 500           # Mis à jour à 50 époques
 optimizer = "adam"    # Optimiseur Adam
 loss_fn = "cross_entropy"
+freeze_agent = "NullFreezer" # Pas de gel
 
 [train.optim_args]
 lr = 0.001            # Taux d'apprentissage standard pour Adam
@@ -25,6 +26,9 @@ lr = 0.001            # Taux d'apprentissage standard pour Adam
 [train.scheduler_args]
 milestones = [250,400] # Ajusté pour 50 époques (réduction à 60% et 80%)
 gamma = 0.1           # Division par 10 du LR
+
+[train.freeze_args]
+# Aucun argument nécessaire pour NullFreezer
 
 [results]
 explore = []

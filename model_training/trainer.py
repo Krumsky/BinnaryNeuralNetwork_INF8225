@@ -2,8 +2,13 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+# Modified optimizers
+from qnn.optimizers.adam import Adam  # Adam with weight-specific learning rates
+
 from utils import accuracy
+from qnn.factories import freeze_agent_factory
 from qnn.losses import *
+from qnn.schedulers import *
 from model_training.builder import Builder
 
 from tqdm import tqdm
@@ -38,14 +43,20 @@ class Trainer():
         self.model.to(self.device)
 
         # Initialize the optimizer
-        self.lr_scheduler = None
         if self.optimizer == "sgd":
             self.optimizer = optim.SGD(self.model.parameters(), **self.optim_args)
-            self.lr_scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, **self.scheduler_args)
         elif self.optimizer == "adam":
-            self.optimizer = optim.Adam(self.model.parameters(), **self.optim_args)
-            self.lr_scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, **self.scheduler_args)
+            self.optimizer = Adam(self.model.parameters(), **self.optim_args)
 
+        # Inititalize the scheduler
+        self.lr_scheduler = None
+        if self.scheduler == "MultiStepLR":
+            self.lr_scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, self.scheduler_args["milestones"], self.scheduler_args["gamma"])
+        
+        if "fp_pretraining_end" in self.scheduler_args:
+            self.lr_scheduler = TwoStepBinaryTraining(self.lr_scheduler, fp_pretraining_end=self.scheduler_args["fp_pretraining_end"], model=self.model)
+            
+        
         # Initialize the loss function
         if self.loss_fn == "cross_entropy":
             self.loss_fn = nn.CrossEntropyLoss()
@@ -53,11 +64,18 @@ class Trainer():
             self.loss_fn = nn.MSELoss()
         elif self.loss_fn == "cross_entropy_binreg": # cross entropy with regularization forcing weights around -1 or 1
             self.loss_fn = CrossEntropyBinReg(model=self.model, lbda=0.01)
+                    
+        # Initialize the freeze agent
+        freeze_args = self.freeze_args
+        freeze_args['trainer'] = self
+        freeze_args['model'] = self.model
+        self.freeze_agent = freeze_agent_factory(self.freeze_agent, freeze_args)
+        if 'GV' in self.freeze_agent.__class__.__name__:
+            # The freeze agent works on a weight-specific learning rate, so we need to specify it in the optimizer
+            self.optimizer.lr_list = self.freeze_agent.get_scale_list(self.model.parameters())
 
         self.result_directory = "results_" + filepath.split('.')[0]
         self.result_filepath = "runs/" + self.result_directory
-        if 'runs' not in os.listdir():
-            os.mkdir("runs")
         if self.result_directory not in os.listdir("runs/"):
             os.mkdir(self.result_filepath)
             os.mkdir(self.result_filepath + "/plots")
@@ -82,7 +100,9 @@ class Trainer():
                 out = self.model(data)
                 loss = self.loss_fn(out, target)
                 loss.backward()
+                self.freeze_agent.update_mask_step() # Update the freezing mask for the current step
                 self.optimizer.step()
+                self.freeze_agent.restore_tensors() # Restore the frozen weights
 
                 epoch_loss += loss.item()
                 n = idx
@@ -92,10 +112,12 @@ class Trainer():
                 t.update()
                 
             n += 1
+            self.freeze_agent.update_mask_epoch() # Update the freezing mask for the current epoch
+            self.freeze_agent.restore_tensors() # Restore the frozen weights
             epoch_loss = epoch_loss/n
             test_loss, acc1, acc5 = self.test()
             if self.lr_scheduler:
-                    self.lr_scheduler.step()
+                self.lr_scheduler.step()
         return epoch_loss, test_loss, acc1, acc5
     
     def reset_optim(self):
@@ -112,10 +134,11 @@ class Trainer():
                     'test_loss': 0,
                     'acc1': 0,
                     'acc5': 0,
-                    'epoch_time': 0
+                    'epoch_time': 0,
+                    'frozen_neurons': 0
                 }
         with open(self.result_filepath + f"/raw_csv/{self.builder.model_args['name']}.csv", "w", newline='') as csv:
-            self.result_file = DictWriter(csv, fieldnames=['epoch','train_loss','test_loss','acc1','acc5','epoch_time'])
+            self.result_file = DictWriter(csv, fieldnames=['epoch','train_loss','test_loss','acc1','acc5','epoch_time','%freeze'])
             self.result_file.writeheader()
             self.model.train()
             for e in range(self.epochs):
@@ -128,10 +151,11 @@ class Trainer():
                     'test_loss': test_loss,
                     'acc1': acc1.item(),
                     'acc5': acc5.item(),
-                    'epoch_time': end-beg
+                    'epoch_time': end-beg,
+                    '%freeze': self.freeze_agent.get_pfrozen()
                 }
                 self.result_file.writerow(self.res_dict)
-                print('epoch {}, train loss {}, test loss {}, test acc1 {}, test acc5 {}'.format(e+1, loss, test_loss, acc1.item(), acc5.item()))
+                print('epoch {}, train loss {}, test loss {}, test acc1 {}, test acc5 {}, %freeze {:.4f}'.format(e+1, loss, test_loss, acc1.item(), acc5.item(), self.freeze_agent.get_pfrozen()))
 
     def test(self):
         self.model.eval()

@@ -15,6 +15,9 @@ loss_fn = "cross_entropy" # Select among cross_entropy, mse
 optim_args = {lr=0.1, momentum=0.9, weight_decay=0.0001}
 scheduler_args = {milestones = [250,400], gamma = 0.1}
 device = "cuda"
+freeze_agent = "NullFreezer"
+freeze_args = {name='no freeze'}
+manual_freeze = false
 
 [dataset]
 dataset = "c10" # Select among c10, c100, mnist

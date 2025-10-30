@@ -38,13 +38,19 @@ except:
     print("config file not found, exitting...")
     exit()
 
+config = config.unwrap()
 filepath = filepath.split('/')[-1] # name of the config file
 if device:
     config['model']['device'] = device # change the selected device
 
 if not args.plot_only:
-    subconfigs, _ = config_splitter(config.unwrap()) # split the config into subconfigs
+    subconfigs, _ = config_splitter(config) # split the config into subconfigs
+    idx = 0
     for subconfig in subconfigs:
+        if idx == 110:
+            idx += 1
+            continue
+        idx += 1
         print(f"""
             #######################################################
             #        Starting training with subconfig {subconfig['model']['model_args']['name'].split('_')[-1]}        #
